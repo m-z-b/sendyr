@@ -6,21 +6,35 @@ describe Sendyr::Client do
 		@api_key  = '1234567890'
 		@email    = 'john@example.org'
 		@list_id  = '1'
+		@timeout  = 42
+		@open_timeout = 1
 
 		Sendyr.configure do |c|
 			c.url     = @base_url
 			c.api_key = @api_key
+			c.timeout = @timeout
+			c.open_timeout = @open_timeout
 		end
 	end
 
 	let(:client) { Sendyr::Client.new(@list_id) }
 
 	describe ".initialize" do
-	  it "should properly set instance variables" do
+	  it "should properly set instance variable defaults" do
 	  	client = Sendyr::Client.new(@list_id)
-	  	client.list_id.should  == @list_id
-	  	client.base_uri.should == @base_url
-	  	client.api_key.should  == @api_key
+	  	expect(client.list_id).to eq @list_id
+	  	expect(client.base_uri).to eq @base_url
+	  	expect(client.api_key).to eq @api_key
+	  	expect(client.timeout).to eq @timeout
+	  	expect(client.open_timeout).to eq @open_timeout
+	  end
+	  it "should properly set instance variable defaults" do
+	  	client = Sendyr::Client.new(@list_id, timeout: 27, open_timeout: 23)
+	  	expect(client.list_id).to eq @list_id
+	  	expect(client.base_uri).to eq @base_url
+	  	expect(client.api_key).to eq @api_key
+	  	expect(client.timeout).to eq 27
+	  	expect(client.open_timeout).to eq 23
 	  end
 	end
 
@@ -40,7 +54,7 @@ describe Sendyr::Client do
 			  							 "name"=>"John Smith"}).
         to_return(:status => 200, :body => "true")
 
-			client.subscribe(email: @email, name: 'John Smith', "FirstName" => "John").should == true
+			expect(client.subscribe(email: @email, name: 'John Smith', "FirstName" => "John")).to eq :ok
 		end
 
 		it "succeeds when the response body is '1'" do
@@ -48,10 +62,11 @@ describe Sendyr::Client do
 			stub_request(:post, "#{@base_url}/subscribe").
 			  with(:body => {"boolean"=>"true",
 			  							 "email"=> @email,
+			  							 "name" => "John Smith",
 			  							 "list"=>@list_id}).
         to_return(:status => 200, :body => "1")
 
-			client.subscribe(email: @email).should == true
+			expect(client.subscribe(email: @email, name: 'John Smith')).to eq :ok
 		end
 
 		it "fails when the response message is an error" do
@@ -61,9 +76,9 @@ describe Sendyr::Client do
 			  							 "email"=> @email,
 			  							 "list"=>@list_id,
 			  							 "name"=>"John Smith"}).
-        to_return(:status => 200, :body => "Already subscribed.")
+        to_return(:status => 200, :body => "Some fields are missing.")
 
-			client.subscribe(email: @email, name: 'John Smith', "FirstName" => "John").should == false
+			expect{ client.subscribe(email: @email, name: 'John Smith', "FirstName" => "John")}.to raise_error( Sendyr::Error, "Sendy :missing_fields" )
 		end
 	end
 
@@ -81,18 +96,18 @@ describe Sendyr::Client do
 			  							 "list"=>@list_id}).
         to_return(:status => 200, :body => "true")
 
-			client.unsubscribe(email: @email).should == true
+			expect(client.unsubscribe(email: @email)).to eq :ok
 		end
 
 		it "succeeds when the response body is '1'" do
 			# The API doc says it should return 'true', but we see '1' in real life.
 			stub_request(:post, "#{@base_url}/unsubscribe").
-			  with(:body => {"boolean"=>"true",
-			  							 "email"=> @email,
-			  							 "list"=>@list_id}).
+			  with(:body => {	"boolean"=>"true",
+			 							 		"email"=> @email,
+			  							 	"list"=>@list_id}).
         to_return(:status => 200, :body => "1")
 
-			client.unsubscribe(email: @email).should == true
+			expect(client.unsubscribe(email: @email)).to eq :ok
 		end
 
 		it "fails when the response message is an error" do
@@ -102,7 +117,7 @@ describe Sendyr::Client do
 											 "list"=>@list_id}).
         to_return(:status => 200, :body => "Invalid email address.")
 
-			client.unsubscribe(email: @email).should == false
+			expect{ client.unsubscribe(email: @email) }.to raise_error( Sendyr::Error, "Sendy :invalid_email_address" )
 		end
 	end
 
@@ -122,7 +137,7 @@ describe Sendyr::Client do
 											 "list_id"=> @list_id}).
         to_return(:status => 200, :body => body)
 
-      client.subscription_status(email: @email).should == :not_in_list
+      expect(client.subscription_status(email: @email)).to eq :not_in_list
 		end
 
 		it "returns the correct response when other messages are returned" do
@@ -136,7 +151,7 @@ describe Sendyr::Client do
 												 "list_id"=> @list_id}).
 	        to_return(:status => 200, :body => messages[i])
 
-	      client.subscription_status(email: @email).should == expected_responses[i]
+	      expect(client.subscription_status(email: @email)).to eq expected_responses[i]
 			end
 		end
 	end
@@ -148,59 +163,95 @@ describe Sendyr::Client do
 											 "list_id"=> @list_id}).
         to_return(:status => 200, :body => "10")
 
-      client.active_subscriber_count.should == 10
+      expect(client.active_subscriber_count).to eq 10
 		end
 
-		it "returns false when the body is an error message" do
+		it "to raise an error when the body is an error message" do
 			stub_request(:post, "#{@base_url}/api/subscribers/active-subscriber-count.php").
 				with(:body => {"api_key"=> @api_key,
 											 "list_id"=> @list_id}).
-        to_return(:status => 200, :body => "List does not exist")
+        to_return(:status => 200, :body => "Invalid list ID.")
 
-      client.active_subscriber_count.should == false
+      expect{ client.active_subscriber_count }.to raise_error( Sendyr::Error, "Sendy :invalid_list_id" )
 		end
 	end
 
 		describe "#update_subscription" do
-			it "returns false if email was never subscribed" do
-				client.should_receive(:subscription_status).with(email: @email).and_return(:not_in_list)
-				client.should_receive(:unsubscribe).never
-				client.should_receive(:subscribe).never
+			it "changes the user name if the user was subscribed" do
+				new_name = "Jennifer Smith"
+				stub_request(:post, "#{@base_url}/api/subscribers/subscription-status.php").
+					with(:body => {"api_key"=> @api_key,
+												 "email"  => @email,
+												 "list_id"=> @list_id}).
+	        to_return(:status => 200, :body => "Subscribed")
+				stub_request(:post, "#{@base_url}/subscribe").
+				  with(:body => {"boolean"=>"true",
+				  							 "email"=> @email,
+				  							 "name" => new_name,
+				  							 "list"=>@list_id}).
+	        to_return(:status => 200, :body => "1")
 
-	      client.update_subscription(@email, { name: 'John'}).should == false
+				expect(client.subscribe(email: @email, name: new_name)).to eq :ok
+			end
+
+			it "raises Error :not_in_list if email was never subscribed" do
+				stub_request(:post, "#{@base_url}/api/subscribers/subscription-status.php").
+					with(:body => {"api_key"=> @api_key,
+												 "email"  => @email,
+												 "list_id"=> @list_id}).
+	        to_return(:status => 200, :body => "Email does not exist in list")
+
+	      expect{ client.update_subscription(@email, { name: 'John'}) }.to raise_error( Sendyr::Error, "Sendy :not_in_list" )
 			end
 
 			it "unsubscribes then creates a new subscription if trying to change email address" do
 				new_email = 'newemail@example.org'
 				name      = 'John Smith'
 
-				client.should_receive(:subscription_status).with(email: @email).and_return(:subscribed)
-				client.should_receive(:unsubscribe).with(email: @email).and_return(true)
-				client.should_receive(:subscribe).with(email: new_email, name: name).and_return(true)
+				stub_request(:post, "#{@base_url}/api/subscribers/subscription-status.php").
+					with(:body => {"api_key"=> @api_key,
+												 "email"  => @email,
+												 "list_id"=> @list_id}).
+	        to_return(:status => 200, :body => "Subscribed")
+				stub_request(:post, "#{@base_url}/unsubscribe").
+				  with(:body => {	"boolean"=>"true",
+				 							 		"email"=> @email,
+				  							 	"list"=>@list_id}).
+	        to_return(:status => 200, :body => "1")
+				stub_request(:post, "#{@base_url}/subscribe").
+				  with(:body => {"boolean"=>"true",
+				  							 "email"=> new_email,
+				  							 "name" => name,
+				  							 "list"=>@list_id}).
+	        to_return(:status => 200, :body => "1")
 
-				client.update_subscription(@email, { email: 'newemail@example.org', name: name}).should == true
+				expect(client.update_subscription(@email, { email: 'newemail@example.org', name: name})).to eq :ok
 			end
 
 			it "doesn't change the email if the user complained" do
 				new_email = 'newemail@example.org'
 				name      = 'John Smith'
 
-				client.should_receive(:subscription_status).with(email: @email).and_return(:complained)
-				client.should_receive(:unsubscribe).never
-				client.should_receive(:subscribe).never
-
-				client.update_subscription(@email, { email: 'newemail@example.org', name: name}).should == false
+				stub_request(:post, "#{@base_url}/api/subscribers/subscription-status.php").
+					with(:body => {"api_key"=> @api_key,
+												 "email"  => @email,
+												 "list_id"=> @list_id}).
+	        to_return(:status => 200, :body => "Complained")
+  
+				expect{ client.update_subscription(@email, { email: 'newemail@example.org', name: name})}.to raise_error( Sendyr::Error, "Sendy :complained") 
 			end
 
 			it "doesn't change the email if the user unsubscribed" do
 				new_email = 'newemail@example.org'
 				name      = 'John Smith'
 
-				client.should_receive(:subscription_status).with(email: @email).and_return(:unsubscribed)
-				client.should_receive(:unsubscribe).never
-				client.should_receive(:subscribe).never
+				stub_request(:post, "#{@base_url}/api/subscribers/subscription-status.php").
+					with(:body => {"api_key"=> @api_key,
+												 "email"  => @email,
+												 "list_id"=> @list_id}).
+	        to_return(:status => 200, :body => "Unsubscribed")
 
-				client.update_subscription(@email, { email: 'newemail@example.org', name: name}).should == false
+				expect{ client.update_subscription(@email, { email: 'newemail@example.org', name: name})}.to raise_error( Sendyr::Error, "Sendy :unsubscribed") 
 			end
 
 		end

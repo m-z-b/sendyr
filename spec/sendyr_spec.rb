@@ -12,14 +12,20 @@ describe Sendyr do
 		it "configures itself properly" do
 			url = 'http://example.org'
 			api_key = 'abcd'
+			timeout = 99
+			open_timeout = 42
 
 			Sendyr.configure do |c|
 				c.url = url
 				c.api_key = api_key
+				c.timeout = timeout
+				c.open_timeout = open_timeout
 			end
 
-			Sendyr.configuration.url.should == url
-			Sendyr.configuration.api_key.should == api_key
+			expect(Sendyr.configuration.url).to eq url
+			expect(Sendyr.configuration.api_key).to eq api_key
+			expect(Sendyr.configuration.timeout).to eq timeout
+			expect(Sendyr.configuration.open_timeout).to eq open_timeout
 		end
 	end
 end
