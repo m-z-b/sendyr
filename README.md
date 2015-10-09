@@ -45,7 +45,7 @@ Network or http errors raise a `Faraday::Error` derived exception (see Faraday g
 This was originally based on the sendyr gem by Carl Mercier, but has now been substantially changed to meet different design goals:
 
 1. Timeouts can now be specified for the network calls.
-2. Unexpected results now raise exceptions. The `Sendyr::Error` class is raised for server errors, while the underyhing Faraday gem will raise errors for network issues and 400/500 http status codes.
+2. Unexpected results now raise exceptions. The `Sendyr::Error` class is raised for server errors, while the required Faraday gem will raise errors for network issues and 400/500 http status codes.
 3. Where possible, API calls return a status synmbol (e.g. :ok) indicating a status, rather than true or false
 4. The `Sendyr::Error` exception class contains a `Error#reason` which is the last response from the Sendy server (as a symbol). This can be used to distinguish Sendy errors.
 5. The status symbols are a canonical form of the Sendy server response, with some changes for brevity, consistency, and Sendy documentation errors. See the `Sendyr::Client#get_status` private method for details.
